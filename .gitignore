@@ -31,5 +31,5 @@ htmlcov/
 # Project Specific Data (Uncomment if these should NOT be tracked)
 # data/
 # dataset/
-# uploads/
+uploads/
 # test_images/
