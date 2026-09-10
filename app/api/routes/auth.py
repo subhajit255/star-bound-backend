@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, status, UploadFile, File, Form
 from typing import Optional
 from app.api.deps import get_current_user
 from app.models.user import User
-from app.schemas.user import UserResponse, UserCreate, UserLogin, UserResponseWithToken, UserUpdate, UserForgetPassword, SocialLoginRequest
+from app.schemas.user import UserResponse, UserCreate, UserLogin, UserResponseWithToken, UserUpdate, UserForgetPassword, SocialLoginRequest, UserForgetPasswordOtp
 from app.services.user_service import UserService
 
 router = APIRouter()
@@ -36,7 +36,7 @@ def update_profile(
     )
 
 @router.post("/forget-password-otp", status_code=status.HTTP_200_OK)
-def forget_password(user_in: UserForgetPassword, user_service: UserService = Depends()):
+def forget_password(user_in: UserForgetPasswordOtp, user_service: UserService = Depends()):
     return user_service.forgetPasswordOtp(user_in.model_dump(by_alias=True))
 
 @router.post("/social-login", response_model=UserResponseWithToken, status_code=status.HTTP_200_OK)
