@@ -35,7 +35,7 @@ def update_profile(
         profile_image=profile_image
     )
 
-@router.post("/forget-password", status_code=status.HTTP_200_OK)
+@router.post("/forget-password-otp", status_code=status.HTTP_200_OK)
 def forget_password(user_in: UserForgetPassword, user_service: UserService = Depends()):
     return user_service.forgetPasswordOtp(user_in.model_dump(by_alias=True))
 
