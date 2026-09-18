@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     # JWT Settings
     SECRET_KEY: str = "kjopkp-dkxznjsdiu8833uhd8h8e9j9sc-sjcis9qjo0"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 30  # 30 days
+
+    # Firebase Social Auth
+    FIREBASE_SERVICE_ACCOUNT_PATH: str = "secrets/star-bound-firebase-adminsdk.json"
     
     # Social Auth
     GOOGLE_CLIENT_ID: str | None = None
@@ -31,5 +34,7 @@ class Settings(BaseSettings):
     CELERY_RESULT_BACKEND: str
     
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
+
+    
 
 settings = Settings()

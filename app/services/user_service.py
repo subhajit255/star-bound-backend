@@ -212,46 +212,42 @@ class UserService:
         }
 
     def socialLogin(self, payload: dict) -> dict:
-        provider = payload.get("provider")
+        # Note: 'token' should now be the Firebase ID Token from the client
         token = payload.get("token")
         
         email = None
         name = None
         provider_id = None
+        provider = None
         
         try:
-            if provider == "google":
-                google_client_id = getattr(settings, "GOOGLE_CLIENT_ID", "")
-                idinfo = id_token.verify_oauth2_token(
-                    token, google_requests.Request(), google_client_id
-                )
-                email = idinfo.get("email")
-                name = idinfo.get("name")
-                provider_id = idinfo.get("sub")
+            from firebase_admin import auth
+            decoded_token = auth.verify_id_token(token)
             
-            elif provider == "apple":
-                decoded = jwt.decode(token, options={"verify_signature": False})
-                email = decoded.get("email")
-                name = payload.get("name") or "Apple User" 
-                provider_id = decoded.get("sub")
-                
-            elif provider == "facebook":
-                url = f"https://graph.facebook.com/me?access_token={token}&fields=id,name,email"
-                response = httpx.get(url)
-                data = response.json()
-                if "error" in data:
-                    raise ValueError(data["error"]["message"])
-                email = data.get("email")
-                name = data.get("name")
-                provider_id = data.get("id")
+            email = decoded_token.get("email")
+            name = decoded_token.get("name")
+            provider_id = decoded_token.get("uid")
+            
+            # Identify which provider the user used to sign into Firebase
+            firebase_info = decoded_token.get("firebase", {})
+            sign_in_provider = firebase_info.get("sign_in_provider")
+            
+            if sign_in_provider == "google.com":
+                provider = "google"
+            elif sign_in_provider == "apple.com":
+                provider = "apple"
+            elif sign_in_provider == "facebook.com":
+                provider = "facebook"
+            else:
+                provider = payload.get("provider", "firebase")
                 
             if not email:
-                raise ValueError("Could not extract email from social provider")
+                raise ValueError("Could not extract email from Firebase token")
                 
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=f"Invalid social token: {str(e)}"
+                detail=f"Invalid Firebase token: {str(e)}"
             )
 
         user = self.db.query(User).filter(User.email == email).first()
@@ -260,7 +256,7 @@ class UserService:
             base_username = email.split("@")[0]
             
             user = User(
-                user_type=3,
+                role_id=3,
                 name=name,
                 email=email,
                 user_name=base_username,

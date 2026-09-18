@@ -6,10 +6,13 @@ from app.config import settings
 from app.api.routes import uploads, analyses, skymap, auth, admin
 import app.models # Ensure all SQLAlchemy models are registered
 
+from app.services.firebase import initFirebase
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup hook
     print(f"Starting {settings.PROJECT_NAME}...")
+    initFirebase()
     yield
     # Shutdown hook
     print(f"Shutting down {settings.PROJECT_NAME}...")

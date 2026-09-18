@@ -39,7 +39,13 @@ def update_profile(
 def forget_password(user_in: UserForgetPasswordOtp, user_service: UserService = Depends()):
     return user_service.forgetPasswordOtp(user_in.model_dump(by_alias=True))
 
-@router.post("/social-login", response_model=UserResponseWithToken, status_code=status.HTTP_200_OK)
+@router.post(
+    "/social-login", 
+    response_model=UserResponseWithToken, 
+    status_code=status.HTTP_200_OK,
+    summary="Login or Register using Firebase Social Authentication",
+    description="Authenticate a user using a Firebase ID Token. The token is obtained on the client side via the Firebase SDK (e.g. `user.getIdToken()`). The backend verifies this token, automatically infers the social provider (Google, Apple, Facebook), and logs the user in (or registers them if they do not exist)."
+)
 def social_login(user_in: SocialLoginRequest, user_service: UserService = Depends()):
     return user_service.socialLogin(user_in.model_dump(by_alias=True))
 

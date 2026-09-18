@@ -33,3 +33,5 @@ htmlcov/
 # dataset/
 uploads/
 # test_images/
+
+secrets/*

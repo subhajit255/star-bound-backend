@@ -98,12 +98,18 @@ def process_detection_job(analysis_id: int):
             run.status = "success"
             db.commit()
             
+            return {
+                "points_detected": len(result.points),
+                "matched": len(result.points) >= 4 and bool(matches)
+            }
+            
         except Exception as e:
             db.rollback()
             run.status = "failed"
             db.commit()
             print(f"Error in detection pipeline for analysis {analysis_id}: {e}")
             traceback.print_exc()
+            return {"error": str(e)}
             
     finally:
         db.close()

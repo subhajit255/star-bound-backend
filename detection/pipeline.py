@@ -60,8 +60,8 @@ def sanitize_image_bytes(content: bytes) -> tuple[bytes, str]:
 def _skin_mask(image: np.ndarray) -> np.ndarray:
     """Conservative YCrCb mask; false negatives are safer than background FPs."""
     ycrcb = cv2.cvtColor(image, cv2.COLOR_BGR2YCrCb)
-    lower = np.array([0, 130, 70], dtype=np.uint8)
-    upper = np.array([255, 180, 135], dtype=np.uint8)
+    lower = np.array([0, 120, 60], dtype=np.uint8)
+    upper = np.array([255, 190, 145], dtype=np.uint8)
     mask = cv2.inRange(ycrcb, lower, upper)
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9))
     return cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
@@ -109,7 +109,7 @@ def detect_image(path: str | Path, *, max_points: int = 150, skip_nn: bool = Fal
         min_sigma=2,
         max_sigma=min(24, max(4, min(width, height) / 16)),
         sigma_ratio=1.6,
-        threshold=0.02, # Lowered from 0.06 to be more sensitive to lower-contrast freckles
+        threshold=0.01, # Lowered from 0.02 to be more sensitive to lower-contrast freckles
         overlap=0.1,
     )
 
@@ -135,12 +135,11 @@ def detect_image(path: str | Path, *, max_points: int = 150, skip_nn: bool = Fal
         if y2 - y1 < 3 or x2 - x1 < 3: # Too small to analyze
             continue
             
-        # Hue gate
-        patch_hsv = cv2.cvtColor(image_no_hair[y1:y2, x1:x2], cv2.COLOR_BGR2HSV)
-        mean_hue = np.median(patch_hsv[:,:,0])
-        # Reject reds (pimples/irritation)
-        if mean_hue < 5 or mean_hue > 170:
-            continue
+        # Hue gate (Relaxed to allow reddish-brown freckles)
+        # patch_hsv = cv2.cvtColor(image_no_hair[y1:y2, x1:x2], cv2.COLOR_BGR2HSV)
+        # mean_hue = np.median(patch_hsv[:,:,0])
+        # if mean_hue < 5 or mean_hue > 170:
+        #     continue
             
         # Shape metrics (Circularity and Convexity)
         local_signal = signal[y1:y2, x1:x2]
@@ -169,14 +168,14 @@ def detect_image(path: str | Path, *, max_points: int = 150, skip_nn: bool = Fal
         convexity = area / hull_area
         
         # Reject non-circular or non-convex spots (like scars)
-        if circularity < 0.4 or convexity < 0.7:
+        if circularity < 0.2 or convexity < 0.5:
             continue
             
         local = signal[max(0, yi - 2):yi + 3, max(0, xi - 2):xi + 3]
         score = float(np.clip(local.mean() / 255.0, 0.0, 1.0))
         
         # Only keep clearly visible, high-contrast spots
-        if score >= 0.05: # Lowered from 0.15 to allow softer freckles
+        if score >= 0.02: # Lowered from 0.05 to allow softer freckles
             points.append(DetectedPoint(float(x), float(y), radius, score))
 
     # Distance-based NMS to merge close double detections
@@ -232,7 +231,7 @@ def detect_image(path: str | Path, *, max_points: int = 150, skip_nn: bool = Fal
                 probs = exp_out / exp_out.sum()
                 freckle_prob = float(probs[1])
                 
-                if freckle_prob > 0.4: # 40% confidence threshold (lowered from 50% to keep more valid freckles)
+                if freckle_prob > 0.2: # 20% confidence threshold (lowered from 40% to keep more valid freckles)
                     # You could also update the score here if desired
                     final_points.append(filtered_points[i])
         else:

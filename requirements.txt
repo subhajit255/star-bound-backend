@@ -26,3 +26,6 @@ onnx
 onnxscript
 pandas
 requests
+astropy==8.0.1
+astropy-healpix==2.0.1
+firebase-admin==7.6.0

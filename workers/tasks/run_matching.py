@@ -121,12 +121,18 @@ def process_matching_job(analysis_id: int):
             run.status = "success"
             db.commit()
             
+            return {
+                "matched": bool(matches),
+                "n_matched_stars": best_match.n_matched if matches else 0
+            }
+            
         except Exception as e:
             db.rollback()
             run.status = "failed"
             db.commit()
             print(f"Error in matching pipeline for analysis {analysis_id}: {e}")
             traceback.print_exc()
+            return {"error": str(e)}
             
     finally:
         db.close()

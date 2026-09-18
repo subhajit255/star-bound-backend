@@ -34,10 +34,18 @@ class AuthProvider(str, Enum):
     facebook = "facebook"
 
 class SocialLoginRequest(BaseModel):
-    provider: AuthProvider = Field(..., description="The social provider being used")
-    token: str = Field(..., description="The identity token from the provider")
+    provider: Optional[AuthProvider] = Field(default=None, description="The social provider being used (optional, inferred from token)")
+    token: str = Field(..., description="The Firebase ID token retrieved from the client SDK (e.g. user.getIdToken())")
     
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    model_config = ConfigDict(
+        alias_generator=to_camel, 
+        populate_by_name=True,
+        json_schema_extra={
+            "example": {
+                "token": "eyJhbGciOiJSUzI1NiIs..."
+            }
+        }
+    )
 
 class UserForgetPassword(BaseModel):
     email: EmailStr = Field(..., description="User's email address")
