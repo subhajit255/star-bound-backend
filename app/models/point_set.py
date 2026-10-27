@@ -13,6 +13,7 @@ class PointSet(Base):
     n_points = Column(Integer, nullable=False)
     bbox = Column(String(100), comment="Bounding box of the point set, e.g. 'x_min,y_min,x_max,y_max'")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     # Relationships
     upload = relationship("Upload", back_populates="point_sets")

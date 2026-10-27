@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_ID: str | None = None
     GOOGLE_CLIENT_SECRET: str | None = None
     
+    # Stripe Settings
+    STRIPE_PUBLIC_KEY: str | None = None
+    STRIPE_SECRET_KEY: str | None = None
+    STRIPE_WEBHOOK_SECRET: str | None = None
+
     # Celery Settings
     CELERY_BROKER_URL: str
     CELERY_RESULT_BACKEND: str

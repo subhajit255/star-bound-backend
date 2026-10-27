@@ -28,10 +28,26 @@ class AnalysisCreateResponse(BaseModel):
 
 class ConstellationItem(BaseModel):
     id: int
+    upload_id: int
+    analysis_id: Optional[int] = None
+    rank: Optional[int] = 1
+    ra: Optional[float] = None
+    dec: Optional[float] = None
+    roll: Optional[float] = None
+    scale: Optional[float] = None
+    parity: Optional[int] = None
+    n_matched: Optional[int] = None
+    log_odds: Optional[float] = None
+    confidence_pct: Optional[float] = None
+    star_ids: Optional[List[int]] = None
+    constellation: Optional[str] = None
     asterism_name: Optional[str] = None
+    asterism_meaning: Optional[str] = None
+    story: Optional[str] = None
+    star_pattern_url: Optional[str] = None
+    image_url: Optional[str] = None
     discovered_on: Optional[str] = None
-    ra: float
-    dec: float
+    created_at: Optional[str] = None
 
 class ImageMeta(BaseModel):
     width: int
@@ -41,6 +57,7 @@ class AnalysisResponse(BaseModel):
     analysis_id: int
     upload_id: int
     status: str
+    image_url: Optional[str] = None
     image: Optional[ImageMeta] = None
     n_points: Optional[int] = None
     points: Optional[List[PointUpdate]] = None

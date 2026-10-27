@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+import time
 from pathlib import Path
 from uuid import uuid4
 
@@ -13,9 +13,10 @@ from app.models.user import User
 from app.models.analysis_run import AnalysisRun
 from detection.pipeline import sanitize_image_bytes
 from workers.tasks.analysis_tasks import process_detection_job
+from app.traits.push_notification_trait import PushNotificationTrait
 
 
-class FreckleFinderService:
+class FreckleFinderService(PushNotificationTrait):
     ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp"}
     MAX_BYTES = 10 * 1024 * 1024
 
@@ -56,13 +57,21 @@ class FreckleFinderService:
         user_identifier = current_user.user_name if current_user.user_name else str(current_user.id)
         directory = Path("uploads/analysis") / user_identifier
         directory.mkdir(parents=True, exist_ok=True)
-        path = directory / f"{uuid4().hex}.jpg"
+        
+        unique_filename = f"{int(time.time() * 1000)}.jpg"
+        path = directory / unique_filename
+        counter = 1
+        while path.exists():
+            unique_filename = f"{int(time.time() * 1000)}_{counter}.jpg"
+            path = directory / unique_filename
+            counter += 1
+
         path.write_bytes(sanitized_content)
 
         try:
             upload = Upload(
                 user_id=current_user.id,
-                file_name=image.filename or path.name,
+                file_name=unique_filename,
                 file_path=str(path),
                 file_type=stored_type,
             )

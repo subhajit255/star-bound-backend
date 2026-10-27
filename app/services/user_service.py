@@ -17,10 +17,12 @@ from app.api.deps import get_db
 from app.models.user import User
 from app.models.role import Role
 from app.services.security import get_password_hash, create_access_token, verify_password
-from app.config import settings
+from app.traits.stripe_trait import StripeTrait
+from app.traits.push_notification_trait import PushNotificationTrait
 
-class UserService:
+class UserService(StripeTrait, PushNotificationTrait):
     def __init__(self, db: Session = Depends(get_db)):
+        super().__init__()
         self.db = db
 
     def register(self, payload: dict) -> dict:
@@ -57,14 +59,38 @@ class UserService:
                 detail="User role not found."
             )
         roleId = role.id    
-        # 4. Build the User SQLAlchemy model and insert into DB
+
+        # 4. Create Customer in Stripe and get Account ID
+        stripe_customer_id = None
+        try:
+            stripe_customer = self.createCustomer(
+                email=email,
+                name=name,
+                params={"metadata": {"user_name": baseUsername}}
+            )
+            stripe_customer_id = stripe_customer.id
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to create Stripe customer: {str(e)}"
+            )
+
+        # Get main Stripe Account ID
+        stripe_acc_id = self.getAccountId()
+
+        fcm_token = payload.get("fcm_token") or payload.get("fcmToken")
+
+        # 5. Build the User SQLAlchemy model and insert into DB
         newUser = User(
-            role_id = roleId,
+            role_id=roleId,
             name=name,
             email=email,
             user_name=baseUsername,
             password=hashedPassword,  # Store the HASH, never the plaintext password
-            verified_at = now()
+            fcm_token=fcm_token,
+            stripe_customer_id=stripe_customer_id,
+            stripe_acc_id=stripe_acc_id,
+            verified_at=now()
         )
         
         self.db.add(newUser)
@@ -91,6 +117,7 @@ class UserService:
     def login(self, payload: dict) -> dict:
         email = payload.get("email")
         password = payload.get("password")
+        fcm_token = payload.get("fcm_token") or payload.get("fcmToken")
 
         if not email or not password:
             raise HTTPException(
@@ -113,7 +140,13 @@ class UserService:
                 detail="Invalid email or password."
             )
 
-        # 3. Generate JWT token
+        # 3. Store fcm_token if provided in login request
+        if fcm_token:
+            user.fcm_token = fcm_token
+            self.db.commit()
+            self.db.refresh(user)
+
+        # 4. Generate JWT token
         tokenData = {
             "id": user.id,
             "name": user.name,
@@ -131,6 +164,7 @@ class UserService:
         name = payload.get("name")
         phone = payload.get("phone")
         phoneCode = payload.get("phone_code")
+        fcm_token = payload.get("fcm_token") or payload.get("fcmToken")
 
         if name:
             currentUser.name = name
@@ -138,6 +172,8 @@ class UserService:
             currentUser.phone = phone
         if phoneCode:
             currentUser.phone_code = phoneCode
+        if fcm_token:
+            currentUser.fcm_token = fcm_token
             
         if profile_image:
             # Create uploads directory if it doesn't exist
@@ -250,19 +286,37 @@ class UserService:
                 detail=f"Invalid Firebase token: {str(e)}"
             )
 
+        fcm_token = payload.get("fcm_token") or payload.get("fcmToken")
         user = self.db.query(User).filter(User.email == email).first()
         
         if not user:
             base_username = email.split("@")[0]
-            
+
+            # Create Stripe Customer & get Account ID
+            stripe_customer_id = None
+            try:
+                stripe_customer = self.createCustomer(
+                    email=email,
+                    name=name,
+                    params={"metadata": {"user_name": base_username}}
+                )
+                stripe_customer_id = stripe_customer.id
+            except Exception as e:
+                print(f"Warning: Stripe customer creation failed during social login: {e}")
+
+            stripe_acc_id = self.getAccountId()
+
             user = User(
                 role_id=3,
                 name=name,
                 email=email,
                 user_name=base_username,
                 password=None,
+                fcm_token=fcm_token,
                 auth_provider=provider,
                 provider_id=provider_id,
+                stripe_customer_id=stripe_customer_id,
+                stripe_acc_id=stripe_acc_id,
                 is_verified=True,
                 verified_at=now()
             )
@@ -270,14 +324,16 @@ class UserService:
             self.db.commit()
             self.db.refresh(user)
         else:
+            if fcm_token:
+                user.fcm_token = fcm_token
             if user.auth_provider == "email":
                 user.auth_provider = provider
                 user.provider_id = provider_id
                 user.is_verified = True
                 if not user.verified_at:
                     user.verified_at = now()
-                self.db.commit()
-                self.db.refresh(user)
+            self.db.commit()
+            self.db.refresh(user)
 
         token_data = {
             "id": user.id,
@@ -291,6 +347,12 @@ class UserService:
             "access_token": access_token,
             "token_type": "bearer"
         }
+
+    def updateFcmToken(self, currentUser: User, fcm_token: str) -> User:
+        currentUser.fcm_token = fcm_token
+        self.db.commit()
+        self.db.refresh(currentUser)
+        return currentUser
 
     def getRole(self) -> list[RoleResponse]:
         roles = self.db.query(Role).all()

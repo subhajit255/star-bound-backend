@@ -20,7 +20,7 @@ def process_detection_job(analysis_id: int):
         if not run:
             return
             
-        run.status = "processing"
+        run.status = "detecting_freckles"
         db.commit()
         
         upload = db.query(Upload).filter(Upload.id == run.upload_id).first()
@@ -49,7 +49,8 @@ def process_detection_job(analysis_id: int):
                 )
                 for point in result.points
             ]
-            db.add_all(detections)
+            if detections:
+                db.add_all(detections)
             
             db.add(
                 PointSet(
@@ -59,49 +60,60 @@ def process_detection_job(analysis_id: int):
                 )
             )
             
-            # Run Constellation Matcher
-            if len(result.points) >= 4:
-                quad_index, catalogue_lookup = get_matcher_state()
+            from app.traits.push_notification_trait import PushNotificationTrait
+            from workers.tasks.run_matching import process_matching_job
+
+            if len(result.points) > 0:
+                run.status = "freckles_detected"
+                db.commit()
+
+                # Notify user that freckles were detected with coordinates
+                PushNotificationTrait.notify_user(
+                    db=db,
+                    user_id=upload.user_id,
+                    title="Freckles Detected!",
+                    body="Your freckles have been detected. You can now proceed to generate your constellation.",
+                    notification_type="freckle_detection_success",
+                    data={
+                        "analysis_id": str(analysis_id),
+                        "upload_id": str(upload.id),
+                        "status": "freckles_detected",
+                        "freckle_count": str(len(result.points)),
+                    },
+                    redirection_id=analysis_id,
+                    redirection_table="analysis_runs",
+                )
+
+                # Trigger Constellation Matcher in background
+                process_matching_job.delay(analysis_id)
                 
-                # Center and scale points to roughly a 20 degree Field of View
-                max_dim = max(result.width, result.height)
-                scale_factor = 20.0 / max_dim
-                cx, cy = result.width / 2.0, result.height / 2.0
-                
-                scaled_points_xy = np.array([
-                    [(p.x - cx) * scale_factor, (p.y - cy) * scale_factor]
-                    for p in result.points
-                ])
-                
-                matches = match(scaled_points_xy, quad_index, catalogue_lookup)
-                
-                if matches:
-                    best_match = matches[0]
-                    db.add(
-                        Match(
-                            upload_id=upload.id,
-                            rank=1,
-                            ra=float(best_match.transform.translation[0]),
-                            dec=float(best_match.transform.translation[1]),
-                            roll=float(best_match.transform.rotation),
-                            scale=float(best_match.transform.scale),
-                            parity=int(best_match.parity),
-                            n_matched=int(best_match.n_matched),
-                            log_odds=float(best_match.log_odds),
-                            confidence_pct=float((best_match.n_matched / len(result.points)) * 100.0),
-                            star_ids=[int(sid) for sid in best_match.star_ids_matched],
-                            constellation="Unknown",
-                            asterism_name="Your Stellaris"
-                        )
-                    )
-            
-            run.status = "success"
-            db.commit()
-            
-            return {
-                "points_detected": len(result.points),
-                "matched": len(result.points) >= 4 and bool(matches)
-            }
+                return {
+                    "points_detected": len(result.points)
+                }
+            else:
+                run.status = "no_freckles_detected"
+                db.commit()
+
+                # Notify user that no freckles were detected
+                PushNotificationTrait.notify_user(
+                    db=db,
+                    user_id=upload.user_id,
+                    title="No Freckles Detected",
+                    body="No freckles were identified in your uploaded photo. Please try uploading a clearer, well-lit image.",
+                    notification_type="no_freckles_detected",
+                    data={
+                        "analysis_id": str(analysis_id),
+                        "upload_id": str(upload.id),
+                        "status": "no_freckles_detected",
+                        "freckle_count": "0",
+                    },
+                    redirection_id=analysis_id,
+                    redirection_table="analysis_runs",
+                )
+
+                return {
+                    "points_detected": 0
+                }
             
         except Exception as e:
             db.rollback()
@@ -109,6 +121,26 @@ def process_detection_job(analysis_id: int):
             db.commit()
             print(f"Error in detection pipeline for analysis {analysis_id}: {e}")
             traceback.print_exc()
+
+            try:
+                from app.traits.push_notification_trait import PushNotificationTrait
+                PushNotificationTrait.notify_user(
+                    db=db,
+                    user_id=upload.user_id,
+                    title="Freckle Analysis Failed",
+                    body="An error occurred while analyzing freckles. Please try uploading your image again.",
+                    notification_type="freckle_detection_failed",
+                    data={
+                        "analysis_id": str(analysis_id),
+                        "upload_id": str(upload.id),
+                        "status": "failed",
+                    },
+                    redirection_id=analysis_id,
+                    redirection_table="analysis_runs",
+                )
+            except Exception as notify_err:
+                print(f"Failed to send failure notification: {notify_err}")
+
             return {"error": str(e)}
             
     finally:

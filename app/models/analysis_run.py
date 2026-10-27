@@ -16,6 +16,7 @@ class AnalysisRun(Base):
     model_version = Column(String(50), comment="Version of the rejection classifier model, if used")
     status = Column(String(20), comment="queued | processing | success | failed | no_match")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     # Relationships
     upload = relationship("Upload", back_populates="analysis_runs")

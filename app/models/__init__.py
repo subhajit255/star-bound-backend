@@ -6,3 +6,6 @@ from app.models.match import Match
 from app.models.point_set import PointSet
 from app.models.analysis_run import AnalysisRun
 from app.models.notification import Notification
+from app.models.subscription import Subscription
+from app.models.userSubscription import UserSubscription
+from app.models.transaction import Transaction

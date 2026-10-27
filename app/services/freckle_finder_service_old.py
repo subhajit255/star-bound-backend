@@ -1,4 +1,5 @@
 from pathlib import Path
+import time
 from uuid import uuid4
 import io
 
@@ -63,15 +64,21 @@ class FreckleFinderService:
         except ValueError as exc:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
 
-        extension = ".jpg"
         directory = Path("uploads/analysis") / str(current_user.id)
         directory.mkdir(parents=True, exist_ok=True)
-        path = directory / f"{uuid4().hex}{extension}"
+        unique_filename = f"{int(time.time() * 1000)}.jpg"
+        path = directory / unique_filename
+        counter = 1
+        while path.exists():
+            unique_filename = f"{int(time.time() * 1000)}_{counter}.jpg"
+            path = directory / unique_filename
+            counter += 1
+
         path.write_bytes(sanitized_content)
 
         upload = Upload(
             user_id=current_user.id,
-            file_name=image.filename or path.name,
+            file_name=unique_filename,
             file_path=str(path),
             file_type=stored_type,
         )

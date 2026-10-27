@@ -15,10 +15,12 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str = Field(..., min_length=8, description="User's password")
+    fcm_token: Optional[str] = Field(None, description="Firebase Cloud Messaging device token")
 
 class UserLogin(BaseModel):
     email: EmailStr = Field(..., description="User's email address")
     password: str = Field(..., min_length=1, description="User's password")
+    fcm_token: Optional[str] = Field(None, description="Firebase Cloud Messaging device token")
     
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
@@ -36,6 +38,7 @@ class AuthProvider(str, Enum):
 class SocialLoginRequest(BaseModel):
     provider: Optional[AuthProvider] = Field(default=None, description="The social provider being used (optional, inferred from token)")
     token: str = Field(..., description="The Firebase ID token retrieved from the client SDK (e.g. user.getIdToken())")
+    fcm_token: Optional[str] = Field(None, description="Firebase Cloud Messaging device token")
     
     model_config = ConfigDict(
         alias_generator=to_camel, 
@@ -57,6 +60,12 @@ class UserUpdate(BaseModel):
     name: Optional[str] = Field(None, description="User's full name")
     phone: Optional[str] = Field(None, description="User's phone number")
     phone_code: Optional[str] = Field(None, description="User's phone code")
+    fcm_token: Optional[str] = Field(None, description="Firebase Cloud Messaging device token")
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+class UpdateFcmTokenRequest(BaseModel):
+    fcm_token: str = Field(..., description="Firebase Cloud Messaging device token")
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
@@ -72,7 +81,10 @@ class UserResponse(UserBase):
     role: Optional[RoleResponse] = None
     user_name: str = Field(description="Unique username for the user")
     profile_image: Optional[str] = None
+    stripe_acc_id: Optional[str] = None
+    stripe_customer_id: Optional[str] = None
     is_active: bool = Field(description="1=Active, 0=Inactive")
+    fcm_token: Optional[str] = Field(None, description="Firebase Cloud Messaging device token")
     is_verified: bool = Field(description="1=Verified, 0=Not Verified")
     verified_at: Optional[datetime] = None
     created_at: Optional[datetime] = None

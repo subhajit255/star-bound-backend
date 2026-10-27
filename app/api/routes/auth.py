@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, status, UploadFile, File, Form
 from typing import Optional
 from app.api.deps import get_current_user
 from app.models.user import User
-from app.schemas.user import UserResponse, UserCreate, UserLogin, UserResponseWithToken, UserUpdate, UserForgetPassword, SocialLoginRequest, UserForgetPasswordOtp
+from app.schemas.user import UserResponse, UserCreate, UserLogin, UserResponseWithToken, UserUpdate, UserForgetPassword, SocialLoginRequest, UserForgetPasswordOtp, UpdateFcmTokenRequest
 from app.services.user_service import UserService
 
 router = APIRouter()
@@ -52,3 +52,12 @@ def social_login(user_in: SocialLoginRequest, user_service: UserService = Depend
 @router.post("/reset-password", status_code=status.HTTP_200_OK)
 def reset_password(user_in: UserForgetPassword, user_service: UserService = Depends()):
     return user_service.resetPassword(user_in.model_dump(by_alias=True))
+
+@router.put("/fcm-token", response_model=UserResponse, status_code=status.HTTP_200_OK, summary="Update device FCM token for push notifications")
+def update_fcm_token(
+    fcm_in: UpdateFcmTokenRequest,
+    current_user: User = Depends(get_current_user),
+    user_service: UserService = Depends()
+):
+    return user_service.updateFcmToken(currentUser=current_user, fcm_token=fcm_in.fcm_token)
+

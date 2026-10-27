@@ -103,48 +103,64 @@ def detect_image(path: str | Path, *, max_points: int = 150, skip_nn: bool = Fal
     signal = _correct_illumination(l_channel)
     signal[mask == 0] = 0
 
-    # 5. Blob detection
+    # 5. Blob detection with calibrated sensitivity
     blobs = blob_dog(
         signal.astype(np.float32) / 255.0,
-        min_sigma=2,
-        max_sigma=min(24, max(4, min(width, height) / 16)),
+        min_sigma=2.5,
+        max_sigma=min(28, max(6, min(width, height) / 16)),
         sigma_ratio=1.6,
-        threshold=0.01, # Lowered from 0.02 to be more sensitive to lower-contrast freckles
-        overlap=0.1,
+        threshold=0.025,
+        overlap=0.25,
     )
 
-    # 6. Filtering
+    # 6. Filtering: Annular contrast, aspect ratio (crease rejection), and circularity
     points: list[DetectedPoint] = []
     for y, x, sigma in blobs:
         radius = float(sigma * np.sqrt(2))
-        if radius < 2 or radius > min(width, height) * 0.04:
+        if radius < 2.5 or radius > min(width, height) * 0.05:
             continue
             
         xi, yi = int(round(x)), int(round(y))
-        edge_margin = int(min(width, height) * 0.08)
+        edge_margin = int(min(width, height) * 0.04)
         if not (edge_margin <= xi < width - edge_margin and edge_margin <= yi < height - edge_margin) or mask[yi, xi] == 0:
             continue
             
-        # Extract local patch for filtering (clipping to image bounds)
-        patch_size = int(radius * 2 + 2)
-        r = patch_size // 2
+        # Annular neighborhood: inner spot vs surrounding skin ring
+        r_in = max(3, int(radius))
+        r_out = int(r_in * 2.2)
         
-        y1, y2 = max(0, yi - r), min(height, yi + r)
-        x1, x2 = max(0, xi - r), min(width, xi + r)
+        y1, y2 = max(0, yi - r_out), min(height, yi + r_out)
+        x1, x2 = max(0, xi - r_out), min(width, xi + r_out)
         
-        if y2 - y1 < 3 or x2 - x1 < 3: # Too small to analyze
+        if y2 - y1 < 5 or x2 - x1 < 5:
             continue
             
-        # Hue gate (Relaxed to allow reddish-brown freckles)
-        # patch_hsv = cv2.cvtColor(image_no_hair[y1:y2, x1:x2], cv2.COLOR_BGR2HSV)
-        # mean_hue = np.median(patch_hsv[:,:,0])
-        # if mean_hue < 5 or mean_hue > 170:
-        #     continue
+        patch_L = l_channel[y1:y2, x1:x2]
+        cy, cx = yi - y1, xi - x1
+        
+        Y, X = np.ogrid[:patch_L.shape[0], :patch_L.shape[1]]
+        dist_sq = (X - cx)**2 + (Y - cy)**2
+        
+        inner = patch_L[dist_sq <= r_in**2]
+        outer = patch_L[(dist_sq > r_in**2) & (dist_sq <= r_out**2)]
+        
+        if len(inner) == 0 or len(outer) == 0:
+            continue
             
-        # Shape metrics (Circularity and Convexity)
-        local_signal = signal[y1:y2, x1:x2]
-        _, local_thresh = cv2.threshold(local_signal, 10, 255, cv2.THRESH_BINARY)
-        contours, _ = cv2.findContours(local_thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        mean_in = np.mean(inner)
+        mean_out = np.mean(outer)
+        
+        # Local contrast: spot must be distinctly darker than immediate surrounding skin
+        contrast = (mean_out - mean_in) / max(1.0, mean_out)
+        if contrast < 0.11:  # Rejects faint pores, hairs, and minor skin texture
+            continue
+            
+        # Shape metrics (Aspect ratio and Circularity)
+        local_sig = signal[y1:y2, x1:x2]
+        peak_val = int(local_sig[cy, cx]) if 0 <= cy < local_sig.shape[0] and 0 <= cx < local_sig.shape[1] else int(local_sig.max())
+        thresh_val = max(10, int(peak_val * 0.35))
+        _, bin_spot = cv2.threshold(local_sig, thresh_val, 255, cv2.THRESH_BINARY)
+        contours, _ = cv2.findContours(bin_spot, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         
         if not contours:
             continue
@@ -154,44 +170,34 @@ def detect_image(path: str | Path, *, max_points: int = 150, skip_nn: bool = Fal
         if area == 0:
             continue
             
-        perimeter = cv2.arcLength(cnt, True)
-        if perimeter == 0:
+        # Aspect ratio / elongation test: rejects body creases, folds, and shadow lines
+        aspect_ratio = 1.0
+        if len(cnt) >= 5:
+            ellipse = cv2.fitEllipse(cnt)
+            (center, (d1, d2), angle) = ellipse
+            aspect_ratio = min(d1, d2) / max(1e-3, max(d1, d2))
+            
+        if aspect_ratio < 0.40:  # Lines and crease trenches typically have aspect ratio < 0.25
             continue
             
-        circularity = 4 * np.pi * area / (perimeter * perimeter)
-        
-        hull = cv2.convexHull(cnt)
-        hull_area = cv2.contourArea(hull)
-        if hull_area == 0:
-            continue
-            
-        convexity = area / hull_area
-        
-        # Reject non-circular or non-convex spots (like scars)
-        if circularity < 0.2 or convexity < 0.5:
-            continue
-            
-        local = signal[max(0, yi - 2):yi + 3, max(0, xi - 2):xi + 3]
-        score = float(np.clip(local.mean() / 255.0, 0.0, 1.0))
-        
-        # Only keep clearly visible, high-contrast spots
-        if score >= 0.02: # Lowered from 0.05 to allow softer freckles
-            points.append(DetectedPoint(float(x), float(y), radius, score))
+        # Weighted score based on contrast and spot prominence
+        score = float(np.clip(0.6 * contrast + 0.4 * (peak_val / 255.0), 0.0, 1.0))
+        points.append(DetectedPoint(float(x), float(y), radius, score))
 
-    # Distance-based NMS to merge close double detections
+    # Distance-based NMS to merge duplicate detections on large moles
     points.sort(key=lambda point: point.score, reverse=True)
     filtered_points = []
     for p in points:
         keep = True
         for fp in filtered_points:
             dist = np.sqrt((p.x - fp.x)**2 + (p.y - fp.y)**2)
-            if dist < max(p.radius, fp.radius) * 1.5:
+            if dist < max(p.radius, fp.radius) * 2.0:
                 keep = False
                 break
         if keep:
             filtered_points.append(p)
 
-    # 7. Learned rejection (CNN)
+    # 7. Learned rejection (CNN) validation if model exists
     final_points = []
     try:
         model_path = Path(__file__).parent.parent / "models" / "freckle_classifier.onnx"
@@ -199,27 +205,21 @@ def detect_image(path: str | Path, *, max_points: int = 150, skip_nn: bool = Fal
             session = ort.InferenceSession(str(model_path))
             
             batch_crops = []
-            
             for p in filtered_points:
                 xi, yi = int(round(p.x)), int(round(p.y))
-                r = 24 # 48x48 crop
+                r = 24  # 48x48 crop
                 y1, y2 = max(0, yi - r), min(height, yi + r)
                 x1, x2 = max(0, xi - r), min(width, xi + r)
                 
                 crop = image_no_hair[y1:y2, x1:x2]
-                
-                # Pad if near edge to ensure 48x48
                 if crop.shape[0] < 48 or crop.shape[1] < 48:
                     pad_y = 48 - crop.shape[0]
                     pad_x = 48 - crop.shape[1]
-                    crop = cv2.copyMakeBorder(crop, 0, pad_y, 0, pad_x, cv2.BORDER_CONSTANT, value=[0,0,0])
+                    crop = cv2.copyMakeBorder(crop, 0, pad_y, 0, pad_x, cv2.BORDER_CONSTANT, value=[0, 0, 0])
                     
-                # Preprocess for MobileNetV3
                 crop_float = crop.astype(np.float32) / 255.0
                 crop_float = (crop_float - [0.485, 0.456, 0.406]) / [0.229, 0.224, 0.225]
-                crop_float = crop_float.astype(np.float32)
-                crop_tensor = np.transpose(crop_float, (2, 0, 1)) # HWC to CHW
-                
+                crop_tensor = np.transpose(crop_float.astype(np.float32), (2, 0, 1))
                 batch_crops.append(crop_tensor)
                 
             batch_tensor = np.stack(batch_crops)
@@ -231,13 +231,12 @@ def detect_image(path: str | Path, *, max_points: int = 150, skip_nn: bool = Fal
                 probs = exp_out / exp_out.sum()
                 freckle_prob = float(probs[1])
                 
-                if freckle_prob > 0.2: # 20% confidence threshold (lowered from 40% to keep more valid freckles)
-                    # You could also update the score here if desired
+                # Keep points that pass with >= 30% confidence or high classical contrast
+                if freckle_prob >= 0.30 or filtered_points[i].score >= 0.20:
                     final_points.append(filtered_points[i])
         else:
             final_points = filtered_points
-    except ImportError:
-        # Fallback to classical pipeline if onnxruntime is not installed
+    except Exception:
         final_points = filtered_points
 
     return DetectionResult(width, height, final_points[:max_points], {"detector": 0.0})

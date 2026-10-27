@@ -1,5 +1,6 @@
-from sqlalchemy import BigInteger, Column, Float, Integer, String, ForeignKey, JSON, Text
+from sqlalchemy import BigInteger, Column, Float, Integer, String, ForeignKey, JSON, Text, DateTime
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 from app.db import Base
 
 
@@ -23,6 +24,8 @@ class Match(Base):
     asterism_name = Column(String(255), comment="User-chosen name for their discovered constellation")
     asterism_meaning = Column(String(500), comment="User-chosen meaning for their constellation")
     story = Column(Text, comment="Generated mythology story for the constellation")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     # Relationships
     upload = relationship("Upload", back_populates="matches")

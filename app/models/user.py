@@ -20,7 +20,10 @@ class User(Base):
     provider_id = Column(String(255), nullable=True)
     last_login_ip = Column(String(255))
     profile_image = Column(String(255))
+    stripe_acc_id = Column(String(255), nullable=True, comment="Stripe Connected Account ID")
+    stripe_customer_id = Column(String(255), nullable=True, comment="Stripe Customer ID")
     is_active = Column(Boolean, default=True, comment="1=Active, 0=Inactive")
+    fcm_token = Column(String(512), nullable=True, comment="Firebase Cloud Messaging device token")
     is_verified = Column(Boolean, default=False, comment="1=Verified, 0=Not Verified")
     verified_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -32,5 +35,7 @@ class User(Base):
     notifications = relationship("Notification", back_populates="user")
     uploads = relationship("Upload", back_populates="user")
     role = relationship("Role", back_populates="users")
+    user_subscriptions = relationship("UserSubscription", back_populates="user")
+    transactions = relationship("Transaction", back_populates="user")
     
     

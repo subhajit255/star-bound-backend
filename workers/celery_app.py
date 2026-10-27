@@ -1,4 +1,5 @@
 import os
+import sys
 import cv2
 
 # Fix macOS fork safety issue with OpenCV/NumPy
@@ -17,11 +18,19 @@ celery_app = Celery(
     include=["workers.tasks.build_index", "workers.tasks.analysis_tasks", "workers.tasks.run_matching"]
 )
 
-celery_app.conf.update(
-    task_serializer="json",
-    accept_content=["json"],
-    result_serializer="json",
-    timezone="UTC",
-    enable_utc=True,
-    worker_concurrency=4, # Limit concurrency so it doesn't spawn 8 processes and thrash
-)
+conf = {
+    "task_serializer": "json",
+    "accept_content": ["json"],
+    "result_serializer": "json",
+    "timezone": "UTC",
+    "enable_utc": True,
+    "broker_connection_retry_on_startup": True,
+}
+
+# On macOS, prefork causes SIGSEGV (signal 11) with OpenCV, ONNX Runtime, and Apple CoreFoundation SSL
+if sys.platform == "darwin":
+    conf["worker_pool"] = "solo"
+else:
+    conf["worker_concurrency"] = 4
+
+celery_app.conf.update(conf)
