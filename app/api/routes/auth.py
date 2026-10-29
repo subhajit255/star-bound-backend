@@ -7,11 +7,11 @@ from app.services.user_service import UserService
 
 router = APIRouter()
 
-@router.post("/register", response_model=UserResponseWithToken, status_code=status.HTTP_201_CREATED)
+@router.post("/register", response_model=UserResponseWithToken, status_code=status.HTTP_201_CREATED, summary="Register a new user", description="Register a new user with email, name, password, and optional fcm_token for push notifications.")
 def register(user_in: UserCreate, user_service: UserService = Depends()):
     return user_service.register(user_in.model_dump(by_alias=True))
 
-@router.post("/login", response_model=UserResponseWithToken, status_code=status.HTTP_200_OK)
+@router.post("/login", response_model=UserResponseWithToken, status_code=status.HTTP_200_OK, summary="User Login", description="Authenticate a user with email and password, and optionally store/update their fcm_token.")
 def login(user_in: UserLogin, user_service: UserService = Depends()):
     return user_service.login(user_in.model_dump(by_alias=True))
 
@@ -44,7 +44,7 @@ def forget_password(user_in: UserForgetPasswordOtp, user_service: UserService = 
     response_model=UserResponseWithToken, 
     status_code=status.HTTP_200_OK,
     summary="Login or Register using Firebase Social Authentication",
-    description="Authenticate a user using a Firebase ID Token. The token is obtained on the client side via the Firebase SDK (e.g. `user.getIdToken()`). The backend verifies this token, automatically infers the social provider (Google, Apple, Facebook), and logs the user in (or registers them if they do not exist)."
+    description="Authenticate a user using a Firebase ID Token. The token is obtained on the client side via the Firebase SDK (e.g. `user.getIdToken()`). The backend verifies this token, automatically infers the social provider (Google, Apple, Facebook), and logs the user in (or registers them if they do not exist). Optional `fcm_token` (or `fcmToken`) can also be provided to store/update the device token."
 )
 def social_login(user_in: SocialLoginRequest, user_service: UserService = Depends()):
     return user_service.socialLogin(user_in.model_dump(by_alias=True))

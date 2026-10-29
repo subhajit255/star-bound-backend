@@ -7,7 +7,7 @@ from app.db import Base
 class User(Base):
     __tablename__ = "users"
 
-    id = Column(BigInteger, primary_key=True, index=True)
+    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, index=True)
     role_id = Column(BigInteger, ForeignKey("roles.id"), nullable=True, comment="1=super_admin, 2=admin, 3=user")
     name = Column(String(255))
     user_name = Column(String(255), comment="Unique username for the user")

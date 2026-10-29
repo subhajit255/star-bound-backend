@@ -79,6 +79,8 @@ class UserService(StripeTrait, PushNotificationTrait):
         stripe_acc_id = self.getAccountId()
 
         fcm_token = payload.get("fcm_token") or payload.get("fcmToken")
+        if fcm_token:
+            fcm_token = str(fcm_token).strip() or None
 
         # 5. Build the User SQLAlchemy model and insert into DB
         newUser = User(
@@ -118,6 +120,8 @@ class UserService(StripeTrait, PushNotificationTrait):
         email = payload.get("email")
         password = payload.get("password")
         fcm_token = payload.get("fcm_token") or payload.get("fcmToken")
+        if fcm_token:
+            fcm_token = str(fcm_token).strip() or None
 
         if not email or not password:
             raise HTTPException(
@@ -287,10 +291,17 @@ class UserService(StripeTrait, PushNotificationTrait):
             )
 
         fcm_token = payload.get("fcm_token") or payload.get("fcmToken")
-        user = self.db.query(User).filter(User.email == email).first()
+        if fcm_token:
+            fcm_token = str(fcm_token).strip() or None
+
+        user = self.db.query(User).filter(User.email == email).options(joinedload(User.role)).first()
         
         if not user:
             base_username = email.split("@")[0]
+
+            # Find default user role
+            role = self.db.query(Role).filter(Role.slug == "user").first()
+            role_id = role.id if role else 3
 
             # Create Stripe Customer & get Account ID
             stripe_customer_id = None
@@ -307,7 +318,7 @@ class UserService(StripeTrait, PushNotificationTrait):
             stripe_acc_id = self.getAccountId()
 
             user = User(
-                role_id=3,
+                role_id=role_id,
                 name=name,
                 email=email,
                 user_name=base_username,
@@ -323,7 +334,10 @@ class UserService(StripeTrait, PushNotificationTrait):
             self.db.add(user)
             self.db.commit()
             self.db.refresh(user)
+            if role:
+                user.role = role
         else:
+            # Store fcm_token if provided in social login request (same way as login API)
             if fcm_token:
                 user.fcm_token = fcm_token
             if user.auth_provider == "email":
@@ -349,10 +363,17 @@ class UserService(StripeTrait, PushNotificationTrait):
         }
 
     def updateFcmToken(self, currentUser: User, fcm_token: str) -> User:
-        currentUser.fcm_token = fcm_token
+        if fcm_token:
+            currentUser.fcm_token = str(fcm_token).strip() or None
         self.db.commit()
         self.db.refresh(currentUser)
         return currentUser
+
+    def update_fcm_token(self, currentUser: User, fcm_token: str) -> User:
+        return self.updateFcmToken(currentUser=currentUser, fcm_token=fcm_token)
+
+    def update_profile(self, current_user: User, payload: dict, profile_image: UploadFile | None = None) -> User:
+        return self.updateProfile(currentUser=current_user, payload=payload, profile_image=profile_image)
 
     def getRole(self) -> list[RoleResponse]:
         roles = self.db.query(Role).all()

@@ -17,12 +17,35 @@ class UserCreate(UserBase):
     password: str = Field(..., min_length=8, description="User's password")
     fcm_token: Optional[str] = Field(None, description="Firebase Cloud Messaging device token")
 
+    model_config = ConfigDict(
+        alias_generator=to_camel, 
+        populate_by_name=True,
+        json_schema_extra={
+            "example": {
+                "name": "John Doe",
+                "email": "user@example.com",
+                "password": "Password123!",
+                "fcm_token": "dK1y...device_fcm_token"
+            }
+        }
+    )
+
 class UserLogin(BaseModel):
     email: EmailStr = Field(..., description="User's email address")
     password: str = Field(..., min_length=1, description="User's password")
     fcm_token: Optional[str] = Field(None, description="Firebase Cloud Messaging device token")
     
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    model_config = ConfigDict(
+        alias_generator=to_camel, 
+        populate_by_name=True,
+        json_schema_extra={
+            "example": {
+                "email": "user@example.com",
+                "password": "Password123!",
+                "fcm_token": "dK1y...device_fcm_token"
+            }
+        }
+    )
 
 class UserForgetPasswordOtp(BaseModel):
     email: EmailStr = Field(..., description="User's email address")
@@ -45,7 +68,8 @@ class SocialLoginRequest(BaseModel):
         populate_by_name=True,
         json_schema_extra={
             "example": {
-                "token": "eyJhbGciOiJSUzI1NiIs..."
+                "token": "eyJhbGciOiJSUzI1NiIs...",
+                "fcm_token": "dK1y...device_fcm_token"
             }
         }
     )
