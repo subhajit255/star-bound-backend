@@ -70,3 +70,11 @@ class PointsPatchResponse(BaseModel):
 class UploadResponse(BaseModel):
     upload_id: int
     url: str
+
+class AnalysisCancelResponse(BaseModel):
+    message: str = "Analysis cancelled and removed successfully"
+    analysis_id: Optional[int] = None
+    upload_id: Optional[int] = None
+    status: str = "cancelled"
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)

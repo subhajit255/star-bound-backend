@@ -1,3 +1,4 @@
+from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from app.api.deps import get_db, get_current_user
@@ -8,7 +9,16 @@ from app.models.detection import Detection
 from app.models.point_set import PointSet
 from app.models.match import Match
 from app.models.upload import Upload
-from app.schemas.analysis import AnalysisCreate, PointsPatch, AnalysisCreateResponse, ConstellationItem, AnalysisResponse, PointsPatchResponse
+from app.models.notification import Notification
+from app.schemas.analysis import (
+    AnalysisCreate,
+    PointsPatch,
+    AnalysisCreateResponse,
+    ConstellationItem,
+    AnalysisResponse,
+    PointsPatchResponse,
+    AnalysisCancelResponse,
+)
 from typing import List
 from workers.tasks.analysis_tasks import process_detection_job
 from workers.tasks.run_matching import process_matching_job
@@ -208,3 +218,118 @@ def update_analysis_points(
     process_matching_job.delay(analysis_run.id)
     
     return {"message": "Points updated, matching re-triggered", "status": "matching_stars"}
+
+
+@router.post(
+    "/{id}/cancel",
+    response_model=AnalysisCancelResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Cancel freckle detection/generation",
+    description="Cancels an ongoing or queued freckle analysis, stops related processing, and removes the analysis run, upload, and associated rows from the database and disk."
+)
+def cancel_analysis(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # 1. Lookup AnalysisRun
+    analysis_run = db.query(AnalysisRun).filter(AnalysisRun.id == id).first()
+    upload = None
+
+    if analysis_run:
+        upload = db.query(Upload).filter(Upload.id == analysis_run.upload_id).first()
+        if upload and upload.user_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to cancel this analysis"
+            )
+    else:
+        # Check if id passed is upload_id
+        upload = db.query(Upload).filter(Upload.id == id).first()
+        if upload:
+            if upload.user_id != current_user.id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Not authorized to cancel this analysis"
+                )
+            analysis_run = (
+                db.query(AnalysisRun)
+                .filter(AnalysisRun.upload_id == upload.id)
+                .order_by(AnalysisRun.id.desc())
+                .first()
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Analysis run or upload not found"
+            )
+
+    analysis_id = analysis_run.id if analysis_run else None
+    upload_id = upload.id if upload else (analysis_run.upload_id if analysis_run else None)
+
+    # 2. Mark status as cancelled immediately so any active background workers halt
+    if analysis_run:
+        analysis_run.status = "cancelled"
+        db.commit()
+
+    # 3. Clean up database rows
+    if upload_id:
+        db.query(Detection).filter(Detection.upload_id == upload_id).delete()
+        db.query(PointSet).filter(PointSet.upload_id == upload_id).delete()
+        db.query(Match).filter(Match.upload_id == upload_id).delete()
+        db.query(Notification).filter(
+            Notification.redirection_foreign_id == upload_id,
+            Notification.redirection_foreign_table.in_(["uploads", "upload"])
+        ).delete()
+
+    if analysis_id:
+        db.query(Notification).filter(
+            Notification.redirection_foreign_id == analysis_id,
+            Notification.redirection_foreign_table.in_(["analysis_runs", "analysis_run", "analyses", "analysis"])
+        ).delete()
+
+    file_path = upload.file_path if upload else None
+
+    if upload_id:
+        db.query(AnalysisRun).filter(AnalysisRun.upload_id == upload_id).delete()
+        db.query(Upload).filter(Upload.id == upload_id).delete()
+    elif analysis_id:
+        db.query(AnalysisRun).filter(AnalysisRun.id == analysis_id).delete()
+
+    db.commit()
+
+    # 4. Remove physical file from disk
+    if file_path:
+        try:
+            p = Path(file_path)
+            if p.exists() and p.is_file():
+                p.unlink(missing_ok=True)
+                name_without_ext = p.stem
+                svg_p = Path(f"uploads/star-pattern/{name_without_ext}.svg")
+                if svg_p.exists() and svg_p.is_file():
+                    svg_p.unlink(missing_ok=True)
+        except Exception as file_err:
+            print(f"Warning: could not delete file {file_path}: {file_err}")
+
+    return {
+        "message": "Analysis cancelled and removed successfully",
+        "analysis_id": analysis_id,
+        "upload_id": upload_id,
+        "status": "cancelled"
+    }
+
+
+@router.delete(
+    "/{id}",
+    response_model=AnalysisCancelResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Cancel and delete analysis (DELETE alias)",
+    description="DELETE alias for `POST /api/v1/analyses/{id}/cancel`."
+)
+def delete_analysis(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return cancel_analysis(id=id, db=db, current_user=current_user)
+

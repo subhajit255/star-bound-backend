@@ -17,7 +17,7 @@ def process_detection_job(analysis_id: int):
     db = SessionLocal()
     try:
         run = db.query(AnalysisRun).filter(AnalysisRun.id == analysis_id).first()
-        if not run:
+        if not run or run.status == "cancelled":
             return
             
         run.status = "detecting_freckles"
@@ -38,6 +38,14 @@ def process_detection_job(analysis_id: int):
         try:
             result = detect_image(path)
             
+            # Check if cancelled or deleted while detect_image was processing
+            run = db.query(AnalysisRun).filter(AnalysisRun.id == analysis_id).first()
+            if not run or run.status == "cancelled":
+                return
+            upload = db.query(Upload).filter(Upload.id == run.upload_id).first()
+            if not upload:
+                return
+
             detections = [
                 Detection(
                     upload_id=upload.id,
@@ -117,29 +125,31 @@ def process_detection_job(analysis_id: int):
             
         except Exception as e:
             db.rollback()
-            run.status = "failed"
-            db.commit()
-            print(f"Error in detection pipeline for analysis {analysis_id}: {e}")
-            traceback.print_exc()
+            run = db.query(AnalysisRun).filter(AnalysisRun.id == analysis_id).first()
+            if run and run.status != "cancelled":
+                run.status = "failed"
+                db.commit()
+                print(f"Error in detection pipeline for analysis {analysis_id}: {e}")
+                traceback.print_exc()
 
-            try:
-                from app.traits.push_notification_trait import PushNotificationTrait
-                PushNotificationTrait.notify_user(
-                    db=db,
-                    user_id=upload.user_id,
-                    title="Freckle Analysis Failed",
-                    body="An error occurred while analyzing freckles. Please try uploading your image again.",
-                    notification_type="freckle_detection_failed",
-                    data={
-                        "analysis_id": str(analysis_id),
-                        "upload_id": str(upload.id),
-                        "status": "failed",
-                    },
-                    redirection_id=analysis_id,
-                    redirection_table="analysis_runs",
-                )
-            except Exception as notify_err:
-                print(f"Failed to send failure notification: {notify_err}")
+                try:
+                    from app.traits.push_notification_trait import PushNotificationTrait
+                    PushNotificationTrait.notify_user(
+                        db=db,
+                        user_id=upload.user_id,
+                        title="Freckle Analysis Failed",
+                        body="An error occurred while analyzing freckles. Please try uploading your image again.",
+                        notification_type="freckle_detection_failed",
+                        data={
+                            "analysis_id": str(analysis_id),
+                            "upload_id": str(upload.id),
+                            "status": "failed",
+                        },
+                        redirection_id=analysis_id,
+                        redirection_table="analysis_runs",
+                    )
+                except Exception as notify_err:
+                    print(f"Failed to send failure notification: {notify_err}")
 
             return {"error": str(e)}
             

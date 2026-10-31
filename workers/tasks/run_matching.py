@@ -15,7 +15,7 @@ def process_matching_job(analysis_id: int):
     db = SessionLocal()
     try:
         run = db.query(AnalysisRun).filter(AnalysisRun.id == analysis_id).first()
-        if not run:
+        if not run or run.status == "cancelled":
             return
             
         run.status = "matching_stars"
@@ -209,8 +209,10 @@ def process_matching_job(analysis_id: int):
             
         except Exception as e:
             db.rollback()
-            run.status = "failed"
-            db.commit()
+            run = db.query(AnalysisRun).filter(AnalysisRun.id == analysis_id).first()
+            if run and run.status != "cancelled":
+                run.status = "failed"
+                db.commit()
             print(f"Error in matching pipeline for analysis {analysis_id}: {e}")
             traceback.print_exc()
             return {"error": str(e)}
