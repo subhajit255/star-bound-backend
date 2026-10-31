@@ -1,2 +1,2 @@
 from app.schemas.user import UserBase, UserCreate, UserLogin, UserResponse, UserResponseWithToken
-from app.schemas.notification import NotificationResponse, NotificationPaginatedResponse, MarkNotificationReadResponse, MarkAllReadResponse
+from app.schemas.notification import NotificationResponse, NotificationPaginatedResponse, MarkNotificationReadResponse

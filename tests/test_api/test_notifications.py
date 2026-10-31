@@ -206,21 +206,6 @@ class TestNotificationService(unittest.TestCase):
             self.service.markAsRead(currentUser=self.user1, notification_id=9999)
         self.assertEqual(ctx.exception.status_code, 404)
 
-    def test_mark_all_as_read(self):
-        n1 = Notification(id=1, user_id=1, title="N1", is_read=0, created_at=datetime.now())
-        n2 = Notification(id=2, user_id=1, title="N2", is_read=0, created_at=datetime.now())
-        n3 = Notification(id=3, user_id=1, title="N3", is_read=1, created_at=datetime.now())
-        self.db.add_all([n1, n2, n3])
-        self.db.commit()
-
-        res = self.service.markAllAsRead(currentUser=self.user1)
-        self.assertEqual(res.marked_count, 2)
-
-        after = self.service.getUserNotifications(currentUser=self.user1)
-        self.assertEqual(after.unread_count, 0)
-        for item in after.items:
-            self.assertEqual(item.is_read, 1)
-
 
 class TestNotificationApiRoutes(unittest.TestCase):
     def setUp(self):
@@ -250,7 +235,7 @@ class TestNotificationApiRoutes(unittest.TestCase):
         self.upload = Upload(id=1, user_id=1, file_name='img.jpg', file_path='uploads/analysis/alice/img.jpg')
         self.analysis_run = AnalysisRun(id=10, upload_id=1, status='freckles_detected')
         self.notification = Notification(
-            id=1,
+            id=3,
             user_id=1,
             title='Freckles Found!',
             description='Your freckles are mapped.',
@@ -278,38 +263,45 @@ class TestNotificationApiRoutes(unittest.TestCase):
         app.dependency_overrides.clear()
         self.db.close()
 
-    def test_http_get_notifications(self):
-        res = self.client.get('/api/v1/notifications/')
+    def test_http_get_my_notifications(self):
+        # Test endpoint: https://<domain>/api/v1/notifications/me?page=1&size=20&unread_only=false
+        res = self.client.get('/api/v1/notifications/me?page=1&size=20&unread_only=false')
         self.assertEqual(res.status_code, 200)
         data = res.json()
         self.assertEqual(data['total'], 1)
         self.assertEqual(data['unreadCount'], 1)
         self.assertEqual(len(data['items']), 1)
+        # Check image URL is provided
         self.assertTrue(data['items'][0]['image'].endswith('uploads/analysis/alice/img.jpg'))
-
-    def test_http_get_my_notifications_alias(self):
-        res = self.client.get('/api/v1/notifications/me')
-        self.assertEqual(res.status_code, 200)
-        data = res.json()
-        self.assertEqual(data['total'], 1)
+        # Ensure starPatternUrl is NOT present in the response
+        self.assertNotIn('starPatternUrl', data['items'][0])
+        self.assertNotIn('star_pattern_url', data['items'][0])
 
     def test_http_put_notification_read(self):
-        res = self.client.put('/api/v1/notifications/1/read')
+        # Test endpoint: https://<domain>/api/v1/notifications/3/read
+        res = self.client.put('/api/v1/notifications/3/read')
         self.assertEqual(res.status_code, 200)
         data = res.json()
+        self.assertEqual(data['id'], 3)
         self.assertEqual(data['isRead'], 1)
         self.assertTrue(data['image'].endswith('uploads/analysis/alice/img.jpg'))
+        # Ensure starPatternUrl is NOT present in the response
+        self.assertNotIn('starPatternUrl', data)
+        self.assertNotIn('star_pattern_url', data)
 
-        # Check list again, unread count should be 0
-        list_res = self.client.get('/api/v1/notifications/')
+        # Check list again, unread count should now be 0
+        list_res = self.client.get('/api/v1/notifications/me?page=1&size=20&unread_only=false')
         self.assertEqual(list_res.json()['unreadCount'], 0)
         self.assertEqual(list_res.json()['items'][0]['isRead'], 1)
 
-    def test_http_put_read_all(self):
-        res = self.client.put('/api/v1/notifications/read-all')
-        self.assertEqual(res.status_code, 200)
-        data = res.json()
-        self.assertEqual(data['markedCount'], 1)
+    def test_http_removed_endpoints(self):
+        # GET /api/v1/notifications/ should be removed (404)
+        res_root = self.client.get('/api/v1/notifications/')
+        self.assertEqual(res_root.status_code, 404)
+
+        # PATCH /api/v1/notifications/3/read should be removed (405 Method Not Allowed)
+        res_patch = self.client.patch('/api/v1/notifications/3/read')
+        self.assertEqual(res_patch.status_code, 405)
 
 
 if __name__ == '__main__':

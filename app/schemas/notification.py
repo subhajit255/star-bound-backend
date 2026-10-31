@@ -15,7 +15,6 @@ class NotificationResponse(BaseModel):
     redirection_foreign_table: Optional[str] = None
     image: Optional[str] = Field(None, description="Image URL resolved from redirection_foreign_id and redirection_foreign_table")
     image_url: Optional[str] = Field(None, description="Alias for image URL")
-    star_pattern_url: Optional[str] = Field(None, description="Star pattern SVG URL if available")
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -38,11 +37,3 @@ class MarkNotificationReadResponse(BaseModel):
     notification: NotificationResponse
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
-
-
-class MarkAllReadResponse(BaseModel):
-    message: str = "All notifications marked as read"
-    marked_count: int = 0
-
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
-

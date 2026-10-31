@@ -1,6 +1,5 @@
 import math
-import os
-from typing import Optional, List, Dict, Tuple
+from typing import Optional, List, Dict
 from sqlalchemy.orm import Session, joinedload
 from fastapi import HTTPException, status, Depends
 
@@ -14,8 +13,6 @@ from app.models.match import Match
 from app.schemas.notification import (
     NotificationResponse,
     NotificationPaginatedResponse,
-    MarkNotificationReadResponse,
-    MarkAllReadResponse,
 )
 
 
@@ -64,7 +61,7 @@ class NotificationService:
 
         items: List[NotificationResponse] = []
         for notif in notifications:
-            img_url, star_pattern_url = images_map.get(notif.id, (None, None))
+            img_url = images_map.get(notif.id)
             item = NotificationResponse(
                 id=notif.id,
                 user_id=notif.user_id,
@@ -76,7 +73,6 @@ class NotificationService:
                 redirection_foreign_table=notif.redirection_foreign_table,
                 image=img_url,
                 image_url=img_url,
-                star_pattern_url=star_pattern_url,
                 created_at=notif.created_at,
                 updated_at=notif.updated_at,
             )
@@ -126,7 +122,7 @@ class NotificationService:
             self.db.commit()
             self.db.refresh(notif)
 
-        img_url, star_pattern_url = self.resolve_notification_image(notif, base_url)
+        img_url = self.resolve_notification_image(notif, base_url)
 
         return NotificationResponse(
             id=notif.id,
@@ -139,45 +135,21 @@ class NotificationService:
             redirection_foreign_table=notif.redirection_foreign_table,
             image=img_url,
             image_url=img_url,
-            star_pattern_url=star_pattern_url,
             created_at=notif.created_at,
             updated_at=notif.updated_at,
-        )
-
-    def markAllAsRead(self, currentUser: User) -> MarkAllReadResponse:
-        """
-        Mark all unread notifications for the authenticated user as read.
-        """
-        unread_notifications = (
-            self.db.query(Notification)
-            .filter(Notification.user_id == currentUser.id, Notification.is_read == 0)
-            .all()
-        )
-
-        marked_count = len(unread_notifications)
-        for n in unread_notifications:
-            n.is_read = 1
-
-        if marked_count > 0:
-            self.db.commit()
-
-        return MarkAllReadResponse(
-            message="All notifications marked as read.",
-            marked_count=marked_count
         )
 
     # Aliases for snake_case callers
     get_user_notifications = getUserNotifications
     mark_as_read = markAsRead
-    mark_all_as_read = markAllAsRead
 
     def resolve_notification_image(
         self,
         notif: Notification,
         base_url: Optional[str] = None
-    ) -> Tuple[Optional[str], Optional[str]]:
+    ) -> Optional[str]:
         """
-        Resolves image URL and optional star pattern URL for a single notification
+        Resolves image URL for a single notification
         using `redirection_foreign_id` and `redirection_foreign_table`.
         """
         base_url = (base_url or settings.BASE_URL).rstrip("/")
@@ -185,7 +157,7 @@ class NotificationService:
         ref_table = (notif.redirection_foreign_table or "").strip().lower()
 
         if not ref_id:
-            return None, None
+            return None
 
         if ref_table in ("analysis_runs", "analysis_run", "analyses", "analysis"):
             run = (
@@ -195,18 +167,12 @@ class NotificationService:
                 .first()
             )
             if run and run.upload and run.upload.file_path:
-                return (
-                    self._build_image_url(run.upload.file_path, base_url),
-                    self._build_star_pattern_url(run.upload.file_path, base_url)
-                )
+                return self._build_image_url(run.upload.file_path, base_url)
 
         elif ref_table in ("uploads", "upload"):
             upload = self.db.query(Upload).filter(Upload.id == ref_id).first()
             if upload and upload.file_path:
-                return (
-                    self._build_image_url(upload.file_path, base_url),
-                    self._build_star_pattern_url(upload.file_path, base_url)
-                )
+                return self._build_image_url(upload.file_path, base_url)
 
         elif ref_table in ("matches", "match"):
             match = (
@@ -216,15 +182,12 @@ class NotificationService:
                 .first()
             )
             if match and match.upload and match.upload.file_path:
-                return (
-                    self._build_image_url(match.upload.file_path, base_url),
-                    self._build_star_pattern_url(match.upload.file_path, base_url)
-                )
+                return self._build_image_url(match.upload.file_path, base_url)
 
         elif ref_table in ("users", "user"):
             user = self.db.query(User).filter(User.id == ref_id).first()
             if user and user.profile_image:
-                return self._build_profile_image_url(user.profile_image, base_url), None
+                return self._build_profile_image_url(user.profile_image, base_url)
 
         # Fallback if table name was unspecified but redirection_foreign_id is set
         run = (
@@ -234,30 +197,24 @@ class NotificationService:
             .first()
         )
         if run and run.upload and run.upload.file_path:
-            return (
-                self._build_image_url(run.upload.file_path, base_url),
-                self._build_star_pattern_url(run.upload.file_path, base_url)
-            )
+            return self._build_image_url(run.upload.file_path, base_url)
 
         upload = self.db.query(Upload).filter(Upload.id == ref_id).first()
         if upload and upload.file_path:
-            return (
-                self._build_image_url(upload.file_path, base_url),
-                self._build_star_pattern_url(upload.file_path, base_url)
-            )
+            return self._build_image_url(upload.file_path, base_url)
 
-        return None, None
+        return None
 
     def _resolve_images_batch(
         self,
         notifications: List[Notification],
         base_url: str
-    ) -> Dict[int, Tuple[Optional[str], Optional[str]]]:
+    ) -> Dict[int, Optional[str]]:
         """
         Batch resolves images for a list of notifications to avoid N+1 queries.
-        Returns a dictionary mapping notification.id to (image_url, star_pattern_url).
+        Returns a dictionary mapping notification.id to image_url.
         """
-        results: Dict[int, Tuple[Optional[str], Optional[str]]] = {}
+        results: Dict[int, Optional[str]] = {}
         if not notifications:
             return results
 
@@ -269,7 +226,7 @@ class NotificationService:
 
         for n in notifications:
             if not n.redirection_foreign_id:
-                results[n.id] = (None, None)
+                results[n.id] = None
                 continue
 
             table = (n.redirection_foreign_table or "").strip().lower()
@@ -330,7 +287,7 @@ class NotificationService:
 
         for n in notifications:
             if not n.redirection_foreign_id:
-                results[n.id] = (None, None)
+                results[n.id] = None
                 continue
 
             ref_id = n.redirection_foreign_id
@@ -338,32 +295,20 @@ class NotificationService:
 
             if table in ("analysis_runs", "analysis_run", "analyses", "analysis"):
                 fpath = runs_map.get(ref_id)
-                results[n.id] = (
-                    self._build_image_url(fpath, base_url),
-                    self._build_star_pattern_url(fpath, base_url)
-                )
+                results[n.id] = self._build_image_url(fpath, base_url)
             elif table in ("uploads", "upload"):
                 fpath = uploads_map.get(ref_id)
-                results[n.id] = (
-                    self._build_image_url(fpath, base_url),
-                    self._build_star_pattern_url(fpath, base_url)
-                )
+                results[n.id] = self._build_image_url(fpath, base_url)
             elif table in ("matches", "match"):
                 fpath = matches_map.get(ref_id)
-                results[n.id] = (
-                    self._build_image_url(fpath, base_url),
-                    self._build_star_pattern_url(fpath, base_url)
-                )
+                results[n.id] = self._build_image_url(fpath, base_url)
             elif table in ("users", "user"):
                 pimg = users_map.get(ref_id)
-                results[n.id] = (self._build_profile_image_url(pimg, base_url), None)
+                results[n.id] = self._build_profile_image_url(pimg, base_url)
             else:
                 # Fallback for unknown table
                 fpath = runs_map.get(ref_id) or uploads_map.get(ref_id)
-                results[n.id] = (
-                    self._build_image_url(fpath, base_url),
-                    self._build_star_pattern_url(fpath, base_url)
-                )
+                results[n.id] = self._build_image_url(fpath, base_url)
 
         return results
 
@@ -384,14 +329,3 @@ class NotificationService:
             return profile_image
         filename = profile_image.split("/")[-1]
         return f"{base_url}/uploads/profile/{filename}"
-
-    def _build_star_pattern_url(self, file_path: Optional[str], base_url: str) -> Optional[str]:
-        if not file_path:
-            return None
-        base_name = os.path.basename(file_path)
-        name_without_ext = os.path.splitext(base_name)[0]
-        svg_rel_path = f"uploads/star-pattern/{name_without_ext}.svg"
-        if os.path.exists(svg_rel_path):
-            return f"{base_url}/{svg_rel_path}"
-        return None
-
