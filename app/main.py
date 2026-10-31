@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.api.routes import uploads, analyses, skymap, auth, admin, subscriptions
+from app.api.routes import uploads, analyses, skymap, auth, admin, subscriptions, notifications
 import app.models # Ensure all SQLAlchemy models are registered
 
 from app.services.firebase import initFirebase
@@ -49,6 +49,7 @@ app.include_router(skymap.router, prefix=f"{settings.API_V1_STR}/skymap", tags=[
 app.include_router(auth.router, prefix=f"{settings.API_V1_STR}/auth", tags=["auth"])
 app.include_router(admin.router, prefix=f"{settings.API_V1_STR}/admin", tags=["admin"])
 app.include_router(subscriptions.router, prefix=f"{settings.API_V1_STR}/subscriptions", tags=["subscriptions"])
+app.include_router(notifications.router, prefix=f"{settings.API_V1_STR}/notifications", tags=["notifications"])
 
 @app.exception_handler(HTTPException)
 async def custom_http_exception_handler(request: Request, exc: HTTPException):

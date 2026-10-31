@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
 from firebase_admin import messaging
@@ -80,7 +81,8 @@ class PushNotificationTrait:
                 type=notification_type,
                 is_read=0,
                 redirection_foreign_id=redirection_id,
-                redirection_foreign_table=redirection_table
+                redirection_foreign_table=redirection_table,
+                created_at=datetime.now()
             )
             db.add(notif)
             db.commit()

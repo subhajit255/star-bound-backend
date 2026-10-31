@@ -15,7 +15,10 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str = Field(..., min_length=8, description="User's password")
-    fcm_token: Optional[str] = Field(None, description="Firebase Cloud Messaging device token")
+    fcm_token: Optional[str] = Field(
+        default=None, 
+        description="Firebase Cloud Messaging device token (optional, for mobile push notifications; omit for web)"
+    )
 
     model_config = ConfigDict(
         alias_generator=to_camel, 
@@ -24,8 +27,7 @@ class UserCreate(UserBase):
             "example": {
                 "name": "John Doe",
                 "email": "user@example.com",
-                "password": "Password123!",
-                "fcm_token": "dK1y...device_fcm_token"
+                "password": "Password123!"
             }
         }
     )
@@ -33,7 +35,10 @@ class UserCreate(UserBase):
 class UserLogin(BaseModel):
     email: EmailStr = Field(..., description="User's email address")
     password: str = Field(..., min_length=1, description="User's password")
-    fcm_token: Optional[str] = Field(None, description="Firebase Cloud Messaging device token")
+    fcm_token: Optional[str] = Field(
+        default=None, 
+        description="Firebase Cloud Messaging device token (optional, for mobile push notifications; omit for web)"
+    )
     
     model_config = ConfigDict(
         alias_generator=to_camel, 
@@ -41,8 +46,7 @@ class UserLogin(BaseModel):
         json_schema_extra={
             "example": {
                 "email": "user@example.com",
-                "password": "Password123!",
-                "fcm_token": "dK1y...device_fcm_token"
+                "password": "Password123!"
             }
         }
     )
@@ -61,15 +65,17 @@ class AuthProvider(str, Enum):
 class SocialLoginRequest(BaseModel):
     provider: Optional[AuthProvider] = Field(default=None, description="The social provider being used (optional, inferred from token)")
     token: str = Field(..., description="The Firebase ID token retrieved from the client SDK (e.g. user.getIdToken())")
-    fcm_token: Optional[str] = Field(None, description="Firebase Cloud Messaging device token")
+    fcm_token: Optional[str] = Field(
+        default=None, 
+        description="Firebase Cloud Messaging device token (optional, for mobile push notifications; omit for web)"
+    )
     
     model_config = ConfigDict(
         alias_generator=to_camel, 
         populate_by_name=True,
         json_schema_extra={
             "example": {
-                "token": "eyJhbGciOiJSUzI1NiIs...",
-                "fcm_token": "dK1y...device_fcm_token"
+                "token": "eyJhbGciOiJSUzI1NiIs..."
             }
         }
     )
@@ -84,7 +90,7 @@ class UserUpdate(BaseModel):
     name: Optional[str] = Field(None, description="User's full name")
     phone: Optional[str] = Field(None, description="User's phone number")
     phone_code: Optional[str] = Field(None, description="User's phone code")
-    fcm_token: Optional[str] = Field(None, description="Firebase Cloud Messaging device token")
+    fcm_token: Optional[str] = Field(default=None, description="Firebase Cloud Messaging device token (optional)")
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 

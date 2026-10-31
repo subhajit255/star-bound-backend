@@ -13,6 +13,7 @@ import httpx
 import jwt
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
+from app.config import settings
 from app.api.deps import get_db
 from app.models.user import User
 from app.models.role import Role
@@ -78,9 +79,8 @@ class UserService(StripeTrait, PushNotificationTrait):
         # Get main Stripe Account ID
         stripe_acc_id = self.getAccountId()
 
-        fcm_token = payload.get("fcm_token") or payload.get("fcmToken")
-        if fcm_token:
-            fcm_token = str(fcm_token).strip() or None
+        raw_fcm = payload.get("fcm_token") if payload.get("fcm_token") is not None else payload.get("fcmToken")
+        fcm_token = str(raw_fcm).strip() if raw_fcm and str(raw_fcm).strip() else None
 
         # 5. Build the User SQLAlchemy model and insert into DB
         newUser = User(
@@ -119,9 +119,8 @@ class UserService(StripeTrait, PushNotificationTrait):
     def login(self, payload: dict) -> dict:
         email = payload.get("email")
         password = payload.get("password")
-        fcm_token = payload.get("fcm_token") or payload.get("fcmToken")
-        if fcm_token:
-            fcm_token = str(fcm_token).strip() or None
+        raw_fcm = payload.get("fcm_token") if payload.get("fcm_token") is not None else payload.get("fcmToken")
+        fcm_token = str(raw_fcm).strip() if raw_fcm and str(raw_fcm).strip() else None
 
         if not email or not password:
             raise HTTPException(
@@ -290,9 +289,8 @@ class UserService(StripeTrait, PushNotificationTrait):
                 detail=f"Invalid Firebase token: {str(e)}"
             )
 
-        fcm_token = payload.get("fcm_token") or payload.get("fcmToken")
-        if fcm_token:
-            fcm_token = str(fcm_token).strip() or None
+        raw_fcm = payload.get("fcm_token") if payload.get("fcm_token") is not None else payload.get("fcmToken")
+        fcm_token = str(raw_fcm).strip() if raw_fcm and str(raw_fcm).strip() else None
 
         user = self.db.query(User).filter(User.email == email).options(joinedload(User.role)).first()
         

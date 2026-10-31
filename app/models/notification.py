@@ -6,7 +6,7 @@ from app.db import Base
 class Notification(Base):
     __tablename__ = "notifications"
     
-    id = Column(BigInteger, primary_key=True, index=True)
+    id = Column(BigInteger(), primary_key=True, index=True)
     user_id = Column(BigInteger, ForeignKey("users.id"), index=True)
     title = Column(String(255))
     description = Column(Text)

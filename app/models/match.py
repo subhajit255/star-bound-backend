@@ -8,7 +8,7 @@ class Match(Base):
 
     __tablename__ = "matches"
 
-    id = Column(BigInteger, primary_key=True, index=True)
+    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, index=True)
     upload_id = Column(BigInteger, ForeignKey("uploads.id"), nullable=False, index=True)
     rank = Column(Integer, nullable=False, comment="1 = best match")
     ra = Column(Float, comment="Right ascension of the matched region, degrees")
