@@ -28,7 +28,6 @@ def add_query(
     subject: str = Form(..., description="Subject of the issue / query"),
     message: str = Form(..., description="Detailed message explaining the issue"),
     attachment: Optional[UploadFile] = File(None, description="Optional attachment file (saved to uploads/queries/)"),
-    file: Optional[UploadFile] = File(None, description="Alternative alias for attachment"),
     current_user: User = Depends(get_current_user),
     service: UserQueryService = Depends()
 ):
@@ -37,12 +36,11 @@ def add_query(
     - Requires authenticated user.
     - Uploaded file is stored inside `uploads/queries/`.
     """
-    uploaded_file = attachment or file
     return service.create_query(
         current_user=current_user,
         subject=subject,
         message=message,
-        attachment=uploaded_file
+        attachment=attachment
     )
 
 

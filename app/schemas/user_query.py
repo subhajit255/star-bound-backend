@@ -13,8 +13,8 @@ class UserQueryBase(BaseModel):
 
 
 class UserQueryCreate(UserQueryBase):
-    """Schema for creating a query with an optional file path string (e.g. from JSON)."""
-    file: Optional[str] = Field(None, max_length=255, description="Attachment file path or URL")
+    """Schema for creating a query with an optional attachment file path string."""
+    attachment: Optional[str] = Field(None, max_length=255, description="Attachment file path or URL")
 
 
 class UserQueryReplyRequest(BaseModel):
