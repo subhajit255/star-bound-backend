@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, Integer, Column, Float, String, Text, DateTime, ForeignKey
+from sqlalchemy import BigInteger, Column, Float, String, Text, DateTime, ForeignKey
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.db import Base
@@ -8,7 +8,7 @@ class AnalysisRun(Base):
     
     __tablename__ = "analysis_runs"
 
-    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, index=True)
+    id = Column(BigInteger, primary_key=True, index=True)
     upload_id = Column(BigInteger, ForeignKey("uploads.id"), nullable=False, index=True)
     stage_timings_json = Column(Text, comment="JSON-encoded per-stage duration_ms, e.g. detection, matching")
     peak_rss_mb = Column(Float, comment="Peak resident memory for this run, from memray/profiling")

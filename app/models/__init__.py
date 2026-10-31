@@ -9,3 +9,4 @@ from app.models.notification import Notification
 from app.models.subscription import Subscription
 from app.models.userSubscription import UserSubscription
 from app.models.transaction import Transaction
+from app.models.cms import Cms

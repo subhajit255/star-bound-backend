@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, Integer, Column, String, DateTime, ForeignKey
+from sqlalchemy import BigInteger, Column, String, DateTime, ForeignKey
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.db import Base
@@ -7,7 +7,7 @@ class Upload(Base):
     __tablename__ = "uploads"
 
 
-    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, index=True, autoincrement=True)
+    id = Column(BigInteger, primary_key=True, index=True, autoincrement=True)
     user_id = Column(BigInteger, ForeignKey("users.id"))
     file_name = Column(String(255))
     file_path = Column(String(1024))
