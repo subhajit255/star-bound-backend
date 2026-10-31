@@ -37,5 +37,7 @@ class User(Base):
     role = relationship("Role", back_populates="users")
     user_subscriptions = relationship("UserSubscription", back_populates="user")
     transactions = relationship("Transaction", back_populates="user")
+    user_queries = relationship("UserQuery", foreign_keys="UserQuery.user_id", back_populates="user")
+    user_queries_replied = relationship("UserQuery", foreign_keys="UserQuery.replied_by", back_populates="replied_user")
     
     

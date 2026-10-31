@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.api.routes import uploads, analyses, skymap, auth, admin, subscriptions, notifications, cms
+from app.api.routes import uploads, analyses, skymap, auth, admin, subscriptions, notifications, cms, user_queries
 import app.models # Ensure all SQLAlchemy models are registered
 
 from app.services.firebase import initFirebase
@@ -31,6 +31,7 @@ import os
 
 # Ensure uploads directory exists so StaticFiles doesn't crash on startup
 os.makedirs("uploads/profiles", exist_ok=True)
+os.makedirs("uploads/queries", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # Add CORS middleware
@@ -51,6 +52,7 @@ app.include_router(admin.router, prefix=f"{settings.API_V1_STR}/admin", tags=["a
 app.include_router(subscriptions.router, prefix=f"{settings.API_V1_STR}/subscriptions", tags=["subscriptions"])
 app.include_router(notifications.router, prefix=f"{settings.API_V1_STR}/notifications", tags=["notifications"])
 app.include_router(cms.router, prefix=f"{settings.API_V1_STR}/cms", tags=["cms"])
+app.include_router(user_queries.router, prefix=f"{settings.API_V1_STR}/user-queries", tags=["user-queries"])
 
 @app.exception_handler(HTTPException)
 async def custom_http_exception_handler(request: Request, exc: HTTPException):
