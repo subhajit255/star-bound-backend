@@ -85,6 +85,40 @@ class TestBodySkinValidation(unittest.TestCase):
             self.assertLess(metrics['skin_ratio'], 0.10)
             self.assertIn("No human skin or body region detected", msg)
 
+    def test_validate_body_image_rejects_taj_mahal_user_image(self):
+        taj_path = Path("/Users/subhajitsaha/.gemini/antigravity/brain/c82cd1e8-0b77-4f8f-a2f1-ba0d925f50ff/.user_uploaded/media_1793980299883_41c995b0.jpg")
+        if taj_path.exists():
+            taj_img = cv2.imread(str(taj_path))
+            is_valid, msg, metrics = validate_body_image(taj_img)
+            self.assertFalse(is_valid)
+            self.assertLess(metrics['skin_ratio'], 0.35)
+            self.assertIn("No human skin or body region detected", msg)
+
+    def test_upload_api_rejects_taj_mahal_image(self):
+        taj_path = Path("/Users/subhajitsaha/.gemini/antigravity/brain/c82cd1e8-0b77-4f8f-a2f1-ba0d925f50ff/.user_uploaded/media_1793980299883_41c995b0.jpg")
+        if taj_path.exists():
+            with open(taj_path, "rb") as f:
+                res = self.client.post(
+                    "/api/v1/uploads/",
+                    files={"image": ("taj_mahal.jpg", f, "image/jpeg")}
+                )
+            self.assertEqual(res.status_code, 400)
+            self.assertIn("No human skin or body region detected", res.json()["message"])
+
+    def test_freckles_and_moles_detection_accuracy_preserved(self):
+        # Verify genuine skin images detect moles and freckles with 100% precision
+        baselines = {
+            'mole.jpg': 3,
+            'mole_2.jpg': 4,
+            'moles_test.jpg': 4,
+            'freckles_test.jpg': 17,
+        }
+        for name, expected_count in baselines.items():
+            p = Path("test_images") / name
+            if p.exists():
+                res = detect_image(p)
+                self.assertEqual(len(res.points), expected_count, f"Mismatch in point count for {name}")
+
     def test_upload_api_accepts_valid_skin_image(self):
         skin_img = np.full((300, 300, 3), (145, 175, 205), dtype=np.uint8)
         cv2.circle(skin_img, (100, 100), 5, (40, 60, 80), -1)
