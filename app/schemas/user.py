@@ -139,6 +139,12 @@ class UserResponseWithToken(BaseModel):
     
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
+class UserStatusChangeResponse(BaseModel):
+    message: str
+    user: UserResponse
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
 class UserPaginatedResponse(BaseModel):
     items: List[UserResponse]
     total: int

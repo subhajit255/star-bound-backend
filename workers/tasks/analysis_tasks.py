@@ -123,6 +123,32 @@ def process_detection_job(analysis_id: int):
                     "points_detected": 0
                 }
             
+        except ValueError as e:
+            db.rollback()
+            run = db.query(AnalysisRun).filter(AnalysisRun.id == analysis_id).first()
+            if run and run.status != "cancelled":
+                run.status = "rejected_invalid_image"
+                db.commit()
+                try:
+                    from app.traits.push_notification_trait import PushNotificationTrait
+                    PushNotificationTrait.notify_user(
+                        db=db,
+                        user_id=upload.user_id,
+                        title="Invalid Image Uploaded",
+                        body=str(e),
+                        notification_type="invalid_image_detected",
+                        data={
+                            "analysis_id": str(analysis_id),
+                            "upload_id": str(upload.id),
+                            "status": "rejected_invalid_image",
+                        },
+                        redirection_id=analysis_id,
+                        redirection_table="analysis_runs",
+                    )
+                except Exception as notify_err:
+                    print(f"Failed to send invalid image notification: {notify_err}")
+            return {"error": str(e)}
+            
         except Exception as e:
             db.rollback()
             run = db.query(AnalysisRun).filter(AnalysisRun.id == analysis_id).first()

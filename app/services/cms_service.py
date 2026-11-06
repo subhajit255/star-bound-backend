@@ -41,11 +41,7 @@ class CmsService:
                 detail="Title is required to create a CMS page."
             )
 
-        slug = data.get("slug")
-        if not slug or not str(slug).strip():
-            slug = slugify(title)
-        else:
-            slug = slugify(str(slug))
+        slug = slugify(title)
         data["slug"] = slug
 
         # Check slug uniqueness
@@ -78,10 +74,11 @@ class CmsService:
 
         data = payload.model_dump(exclude_unset=True) if isinstance(payload, CmsUpdate) else dict(payload)
 
-        # Check slug uniqueness if being changed
-        new_slug = data.get("slug")
-        if new_slug:
-            new_slug = slugify(str(new_slug))
+        # A title change also changes the URL slug.
+        data.pop("slug", None)
+        new_title = data.get("title")
+        if new_title is not None:
+            new_slug = slugify(new_title)
             data["slug"] = new_slug
             if new_slug != cms.slug:
                 existing_slug = self.db.query(Cms).filter(
@@ -168,4 +165,3 @@ class CmsService:
         }
 
     deleteCms = delete_cms
-

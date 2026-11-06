@@ -1,4 +1,6 @@
 import time
+import cv2
+import numpy as np
 from fastapi import APIRouter, Depends, File, UploadFile, status, HTTPException, Request
 from sqlalchemy.orm import Session
 from app.api.deps import get_db, get_current_user
@@ -6,6 +8,7 @@ from app.models.user import User
 from app.models.upload import Upload
 from pathlib import Path
 from detection.pipeline import sanitize_image_bytes
+from detection.skin_mask import validate_body_image
 from app.schemas.analysis import UploadResponse
 from app.config import settings
 
@@ -46,6 +49,16 @@ def create_upload(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(exc),
         ) from exc
+
+    # Validate that the uploaded image contains human body / skin region
+    encoded = np.frombuffer(sanitized_content, dtype=np.uint8)
+    decoded_img = cv2.imdecode(encoded, cv2.IMREAD_COLOR)
+    is_valid, reason, _ = validate_body_image(decoded_img)
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid image: {reason}",
+        )
 
     user_identifier = current_user.user_name if current_user.user_name else str(current_user.id)
     directory = Path("uploads/analysis") / user_identifier

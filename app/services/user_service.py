@@ -407,4 +407,28 @@ class UserService(StripeTrait, PushNotificationTrait):
             "size": size,
             "total_pages": total_pages
         }
+
+    def changeUserStatus(self, currentUser: User, user_id: int) -> dict:
+        # check the token for admin user 
+        adminRoles = self.db.query(Role).filter(or_(Role.slug == "super-admin", Role.slug == "admin")).all()
+        if currentUser.role_id not in [r.id for r in adminRoles]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized"
+            )
+        # find the user by id
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        # change the status of the user
+        user.is_active = not user.is_active
+        self.db.commit()
+        self.db.refresh(user)
         
+        return {
+            "message": f"User {'activated' if user.is_active else 'blocked'} successfully",
+            "user": UserResponse.model_validate(user, from_attributes=True)
+        }

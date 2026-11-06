@@ -17,7 +17,7 @@ def create_cms(
 ):
     """
     Create a new CMS page (Admin only).
-    - If `slug` is omitted or empty, it is automatically generated from `title`.
+    - The URL slug is automatically generated from `title`.
     """
     return cms_service.create_cms(payload=cms_in, current_user=current_user)
 
@@ -68,4 +68,3 @@ def delete_cms(
     Delete a CMS page by ID (Admin only).
     """
     return cms_service.delete_cms(cms_id=cms_id, current_user=current_user)
-

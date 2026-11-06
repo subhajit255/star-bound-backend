@@ -63,9 +63,7 @@ class TestCmsServiceAndRoutes(unittest.TestCase):
         cms = self.service.create_cms(
             payload=CmsCreate(
                 title="Terms & Conditions",
-                description="<p>Our terms of service.</p>",
-                meta_title="Terms of Service",
-                meta_keywords="terms, legal"
+                description="<p>Our terms of service.</p>"
             ),
             current_user=self.admin_user
         )
@@ -74,25 +72,14 @@ class TestCmsServiceAndRoutes(unittest.TestCase):
         self.assertEqual(cms.title, "Terms & Conditions")
         self.assertTrue(cms.status)
 
-    def test_create_cms_explicit_slug(self):
-        cms = self.service.create_cms(
-            payload=CmsCreate(
-                title="Privacy Policy",
-                slug="privacy-policy-2026",
-                description="Privacy details."
-            ),
-            current_user=self.admin_user
-        )
-        self.assertEqual(cms.slug, "privacy-policy-2026")
-
     def test_create_cms_duplicate_slug_raises_error(self):
         self.service.create_cms(
-            payload=CmsCreate(title="About Us", slug="about-us"),
+            payload=CmsCreate(title="About Us"),
             current_user=self.admin_user
         )
         with self.assertRaises(HTTPException) as ctx:
             self.service.create_cms(
-                payload=CmsCreate(title="Another About Us", slug="about-us"),
+                payload=CmsCreate(title="About Us"),
                 current_user=self.admin_user
             )
         self.assertEqual(ctx.exception.status_code, status.HTTP_400_BAD_REQUEST)
@@ -104,12 +91,24 @@ class TestCmsServiceAndRoutes(unittest.TestCase):
         )
         updated = self.service.update_cms(
             cms_id=cms.id,
-            payload=CmsUpdate(description="Updated refund info", meta_description="Refund page"),
+            payload=CmsUpdate(description="Updated refund info"),
             current_user=self.admin_user
         )
         self.assertEqual(updated.description, "Updated refund info")
-        self.assertEqual(updated.meta_description, "Refund page")
         self.assertEqual(updated.title, "Refund Policy")  # unchanged
+        self.assertEqual(updated.slug, "refund-policy")
+
+    def test_update_cms_regenerates_slug_when_title_changes(self):
+        cms = self.service.create_cms(
+            payload=CmsCreate(title="Old Page Title"),
+            current_user=self.admin_user
+        )
+        updated = self.service.update_cms(
+            cms_id=cms.id,
+            payload=CmsUpdate(title="New Page Title"),
+            current_user=self.admin_user
+        )
+        self.assertEqual(updated.slug, "new-page-title")
 
     def test_update_cms_not_found(self):
         with self.assertRaises(HTTPException) as ctx:
@@ -121,8 +120,10 @@ class TestCmsServiceAndRoutes(unittest.TestCase):
         self.assertEqual(ctx.exception.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_get_cms_list(self):
-        self.service.create_cms(CmsCreate(title="Page 1", status=True), current_user=self.admin_user)
-        self.service.create_cms(CmsCreate(title="Page 2", status=False), current_user=self.admin_user)
+        self.service.create_cms(CmsCreate(title="Page 1"), current_user=self.admin_user)
+        inactive_page = Cms(title="Page 2", slug="page-2", status=False)
+        self.db.add(inactive_page)
+        self.db.commit()
 
         all_pages = self.service.get_cms_list()
         self.assertEqual(len(all_pages), 2)
@@ -132,10 +133,7 @@ class TestCmsServiceAndRoutes(unittest.TestCase):
         self.assertEqual(active_pages[0].title, "Page 1")
 
     def test_get_cms_by_identifier(self):
-        cms = self.service.create_cms(
-            CmsCreate(title="Contact Us", slug="contact-us"),
-            current_user=self.admin_user
-        )
+        cms = self.service.create_cms(CmsCreate(title="Contact Us"), current_user=self.admin_user)
         by_slug = self.service.get_cms_by_identifier("contact-us")
         self.assertEqual(by_slug.id, cms.id)
 
@@ -144,7 +142,7 @@ class TestCmsServiceAndRoutes(unittest.TestCase):
 
     def test_delete_cms(self):
         cms = self.service.create_cms(
-            CmsCreate(title="Temporary Page", slug="temp-page"),
+            CmsCreate(title="Temporary Page"),
             current_user=self.admin_user
         )
         res = self.service.delete_cms(cms_id=cms.id, current_user=self.admin_user)
@@ -162,6 +160,20 @@ class TestCmsServiceAndRoutes(unittest.TestCase):
         self.assertEqual(data["slug"], "community-guidelines")
         self.assertEqual(data["title"], "Community Guidelines")
 
+    def test_route_create_rejects_slug_and_removed_fields(self):
+        res = self.client.post(
+            "/api/v1/cms/",
+            json={
+                "title": "Community Guidelines",
+                "slug": "custom-slug",
+                "metaTitle": "SEO title",
+                "metaDescription": "SEO description",
+                "metaKeywords": "keywords",
+                "status": False,
+            }
+        )
+        self.assertEqual(res.status_code, 422)
+
     def test_route_list_cms(self):
         self.client.post("/api/v1/cms/", json={"title": "Page A"})
         self.client.post("/api/v1/cms/", json={"title": "Page B"})
@@ -173,27 +185,43 @@ class TestCmsServiceAndRoutes(unittest.TestCase):
         self.assertGreaterEqual(len(items), 2)
 
     def test_route_get_cms(self):
-        create_res = self.client.post("/api/v1/cms/", json={"title": "FAQ Page", "slug": "faq"})
+        create_res = self.client.post("/api/v1/cms/", json={"title": "FAQ Page"})
         self.assertEqual(create_res.status_code, 201)
 
         # Get by slug
-        res = self.client.get("/api/v1/cms/faq")
+        res = self.client.get("/api/v1/cms/faq-page")
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.json()["title"], "FAQ Page")
 
     def test_route_update_cms(self):
-        create_res = self.client.post("/api/v1/cms/", json={"title": "Changelog", "slug": "changelog"})
+        create_res = self.client.post("/api/v1/cms/", json={"title": "Changelog"})
         cms_id = create_res.json()["id"]
 
         update_res = self.client.put(
             f"/api/v1/cms/{cms_id}",
-            json={"metaDescription": "Latest product releases."}
+            json={"title": "Product Changelog"}
         )
         self.assertEqual(update_res.status_code, 200)
-        self.assertEqual(update_res.json()["metaDescription"], "Latest product releases.")
+        self.assertEqual(update_res.json()["slug"], "product-changelog")
+
+    def test_route_update_rejects_slug_and_removed_fields(self):
+        create_res = self.client.post("/api/v1/cms/", json={"title": "Changelog"})
+        cms_id = create_res.json()["id"]
+
+        update_res = self.client.put(
+            f"/api/v1/cms/{cms_id}",
+            json={
+                "slug": "custom-slug",
+                "metaTitle": "SEO title",
+                "metaDescription": "SEO description",
+                "metaKeywords": "keywords",
+                "status": False,
+            }
+        )
+        self.assertEqual(update_res.status_code, 422)
 
     def test_route_delete_cms(self):
-        create_res = self.client.post("/api/v1/cms/", json={"title": "Old Page", "slug": "old-page"})
+        create_res = self.client.post("/api/v1/cms/", json={"title": "Old Page"})
         cms_id = create_res.json()["id"]
 
         del_res = self.client.delete(f"/api/v1/cms/{cms_id}")
@@ -203,4 +231,3 @@ class TestCmsServiceAndRoutes(unittest.TestCase):
         # Verify 404 after delete
         get_res = self.client.get(f"/api/v1/cms/{cms_id}")
         self.assertEqual(get_res.status_code, 404)
-

@@ -8,6 +8,8 @@ import numpy as np
 import onnxruntime as ort
 from skimage.feature import blob_dog
 
+from detection.skin_mask import get_skin_mask, validate_body_image
+
 
 @dataclass(frozen=True)
 class DetectedPoint:
@@ -58,13 +60,8 @@ def sanitize_image_bytes(content: bytes) -> tuple[bytes, str]:
 
 
 def _skin_mask(image: np.ndarray) -> np.ndarray:
-    """Conservative YCrCb mask; false negatives are safer than background FPs."""
-    ycrcb = cv2.cvtColor(image, cv2.COLOR_BGR2YCrCb)
-    lower = np.array([0, 120, 60], dtype=np.uint8)
-    upper = np.array([255, 190, 145], dtype=np.uint8)
-    mask = cv2.inRange(ycrcb, lower, upper)
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9))
-    return cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+    """Robust multi-space skin mask across all Fitzpatrick phototypes."""
+    return get_skin_mask(image)
 
 
 def _remove_hair(image: np.ndarray) -> np.ndarray:
@@ -87,6 +84,11 @@ def detect_image(path: str | Path, *, max_points: int = 150, skip_nn: bool = Fal
     """Detect dark, compact candidate points from one image."""
     image = _read_image(path)
     height, width = image.shape[:2]
+
+    # Validate that image contains human skin / body
+    is_valid, reason, _ = validate_body_image(image)
+    if not is_valid:
+        raise ValueError(f"Invalid image: {reason}")
     
     # 1. Hair removal (DullRazor)
     image_no_hair = _remove_hair(image)
